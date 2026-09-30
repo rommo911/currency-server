@@ -8,7 +8,6 @@ GET /flags/<file> -> uploaded/fetched flag images
 import hashlib
 import hmac
 import json
-import math
 import os
 import re
 import secrets
@@ -25,12 +24,17 @@ FLAGS_DIR = os.path.join(APP_DIR, "static", "flags")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 if not ADMIN_PASSWORD:
     raise RuntimeError("ADMIN_PASSWORD is not set (see .env.example)")
-PORT = int(os.environ.get("PORT", "8080"))
+PORT = int(os.environ.get("PORT", "8089"))
+API_TOKEN = os.environ.get("API_TOKEN", "")  # optional: if set, /api/payload needs "Authorization: Bearer <token>"
 
 SCHEMA = 1  # payload format; client rejects other values
 PALETTES = ["midnight", "emerald", "sunset", "pearl"]
 MAX_TITLE, MAX_SUBTITLE, MAX_NAME, MAX_SYMBOL, MAX_CODE, MAX_PRICE = 80, 140, 25, 3, 5, 1_000_000
 FX = ["fx_glass", "fx_scan", "fx_flash", "fx_glow"]
+
+CLIENT_WINDOW = 3600  # seconds a client stays listed after its last pull
+clients = {}  # client id -> {name, ip, version, first_seen, last_seen, pulls}; in memory, resets on restart
+_clients_lock = threading.Lock()
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024
@@ -43,8 +47,8 @@ DEFAULT = {
     "settings": {"title": "Prices Dashboard", "subtitle": "Current prices", "color_palette": "midnight",
                  "show_updated_at": True, **{k: True for k in FX}},
     "currencies": [
-        {"code": "USD", "name": "US Dollar", "symbol": "$", "price": 1.0, "flag": None, "enabled": True},
-        {"code": "EUR", "name": "Euro", "symbol": "€", "price": 0.9, "flag": None, "enabled": True},
+        {"code": "USD", "name": "US Dollar", "symbol": "$", "price": 1, "flag": None, "enabled": True},
+        {"code": "EUR", "name": "Euro", "symbol": "€", "price": 1, "flag": None, "enabled": True},
     ],
 }
 
@@ -74,11 +78,12 @@ def clean_text(raw, max_len):
 
 
 def parse_price(raw):
-    try:
-        v = float((raw or "").strip())
-    except ValueError:
+    """Whole numbers only."""
+    raw = (raw or "").strip()
+    if not re.fullmatch(r"\d{1,8}", raw):
         return None
-    return v if math.isfinite(v) and 0 <= v <= MAX_PRICE else None
+    v = int(raw)
+    return v if v <= MAX_PRICE else None
 
 
 def flag_for(code):
@@ -98,6 +103,33 @@ def flag_for(code):
         return None
 
 
+def record_client():
+    """Count this pull. Key is the client's UUID; older clients without one are keyed by IP."""
+    ip = request.remote_addr or "?"
+    cid = re.sub(r"[^A-Za-z0-9-]", "", request.headers.get("X-Client-Id", ""))[:40]
+    key = cid or f"ip:{ip}"
+    name = clean_text(request.headers.get("X-Client-Name"), 40) or ("unknown (old client)" if not cid else "?")
+    version = clean_text(request.headers.get("X-Client-Version"), 30) or "?"
+    now = time.time()
+    with _clients_lock:
+        c = clients.setdefault(key, {"first_seen": now, "pulls": 0})
+        c.update(name=name or "?", ip=ip, version=version, last_seen=now)
+        c["pulls"] += 1
+
+
+def recent_clients():
+    now = time.time()
+    with _clients_lock:
+        for k in [k for k, c in clients.items() if now - c["last_seen"] > CLIENT_WINDOW]:
+            del clients[k]
+        rows = [dict(c, id=k if not k.startswith("ip:") else "-", ago=int(now - c["last_seen"])) for k, c in clients.items()]
+    return sorted(rows, key=lambda r: r["ago"])
+
+
+def ago_text(s):
+    return f"{s}s" if s < 60 else f"{s // 60}m {s % 60}s"
+
+
 def auth_ok():
     a = request.authorization
     return bool(a) and hmac.compare_digest(a.password or "", ADMIN_PASSWORD)
@@ -109,6 +141,11 @@ def deny():
 
 @app.route("/api/payload")
 def payload():
+    if API_TOKEN:
+        a = request.headers.get("Authorization", "")
+        if not a.startswith("Bearer ") or not hmac.compare_digest(a[7:], API_TOKEN):
+            return Response("Invalid or missing token.", 401)
+    record_client()
     d = load()
     base = request.url_root.rstrip("/")
     resp = jsonify({
@@ -117,7 +154,8 @@ def payload():
         "updated_at": d["updated_at"],
         "settings": d["settings"],
         "currencies": [
-            {**{k: c[k] for k in ("code", "name", "symbol", "price", "enabled")},
+            {**{k: c[k] for k in ("code", "name", "symbol", "enabled")},
+             "price": int(round(c["price"])),
              "flag": f"{base}/flags/{c['flag']}" if c.get("flag") else None}
             for c in d["currencies"]
         ],
@@ -141,7 +179,7 @@ def admin():
     if not auth_ok():
         return deny()
     d = load()
-    return render_template("admin.html", d=d, s=d["settings"], palettes=PALETTES, csrf=CSRF,
+    return render_template("admin.html", d=d, clients=recent_clients(), ago_text=ago_text, s=d["settings"], palettes=PALETTES, csrf=CSRF,
                            msg=request.args.get("msg"), error=request.args.get("error"),
                            lim=dict(title=MAX_TITLE, subtitle=MAX_SUBTITLE, name=MAX_NAME, symbol=MAX_SYMBOL, code=MAX_CODE))
 
@@ -181,7 +219,7 @@ def admin_save():
         if not name or symbol is None:
             return fail(f"{code}: name required (max {MAX_NAME}), symbol max {MAX_SYMBOL}")
         if price is None:
-            return fail(f"{code}: invalid price (0..{MAX_PRICE:,})")
+            return fail(f"{code}: invalid price (whole number 0..{MAX_PRICE:,})")
         flag = f.get(f"flag_{i}") or None
         if flag and not re.fullmatch(r"[a-z0-9]+\.png", flag):
             flag = None

@@ -12,6 +12,17 @@
   <p class="sub">Payload version <b>{{ d.version }}</b> · <a href="{{ url_for('payload') }}" target="_blank">/api/payload</a></p>
   {% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
   {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
+  <div class="card">
+    <h2>Clients pulled in the last hour: {{ clients|length }}</h2>
+    {% if clients %}
+    <div class="tbl"><table>
+      <tr><th>Name</th><th>ID</th><th>IP</th><th>Version</th><th>Last pull</th><th>Pulls</th></tr>
+      {% for c in clients %}
+      <tr><td>{{ c.name }}</td><td>{{ c.id[:8] }}</td><td>{{ c.ip }}</td><td>{{ c.version }}</td><td>{{ ago_text(c.ago) }} ago</td><td>{{ c.pulls }}</td></tr>
+      {% endfor %}
+    </table></div>
+    {% else %}<p class="sub">No client has pulled yet.</p>{% endif %}
+  </div>
   <form method="post" action="{{ url_for('admin_save') }}" enctype="multipart/form-data">
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <input type="hidden" name="rows" value="{{ d.currencies|length }}">
@@ -37,7 +48,7 @@
         <input name="code_{{ loop.index0 }}" value="{{ c.code or '' }}" placeholder="{{ 'Code (new)' if not c.code else '' }}" maxlength="{{ lim.code }}" size="6">
         <input name="name_{{ loop.index0 }}" value="{{ c.name or '' }}" placeholder="Name" maxlength="{{ lim.name }}">
         <input name="symbol_{{ loop.index0 }}" value="{{ c.symbol or '' }}" placeholder="Sym" maxlength="{{ lim.symbol }}" size="3">
-        <input name="price_{{ loop.index0 }}" value="{{ c.price if c.price is defined else '' }}" placeholder="Price" inputmode="decimal" size="10">
+        <input name="price_{{ loop.index0 }}" value="{{ c.price|round|int if c.price is defined else '' }}" placeholder="Price" inputmode="numeric" pattern="[0-9]*" size="10">
         <label class="chk"><input type="checkbox" name="enabled_{{ loop.index0 }}" {% if c.enabled is not defined or c.enabled %}checked{% endif %}> on</label>
         <input type="file" name="upload_{{ loop.index0 }}" accept="image/png" title="Flag PNG (optional; auto-fetched if empty)">
         {% if c.code %}<label class="chk del"><input type="checkbox" name="remove_{{ loop.index0 }}"> remove</label>{% endif %}
