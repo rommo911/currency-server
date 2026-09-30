@@ -1,0 +1,21 @@
+services:
+  currency-server:
+    build: .
+    container_name: currency-server
+    restart: unless-stopped
+    env_file: .env              # ADMIN_PASSWORD, PORT, API_TOKEN (same file as ./run.sh)
+    environment:
+      PORT: ${PORT:-8089}       # container listens on the same port it publishes
+    ports:
+      - "${PORT:-8089}:${PORT:-8089}"
+    volumes:
+      - currency-data:/data     # data.json + flags survive rebuilds
+    healthcheck:
+      # any HTTP answer (even 401) means the server is up
+      test: ["CMD", "python", "-c", "import urllib.request as u,urllib.error as e,os\ntry: u.urlopen('http://localhost:'+os.environ.get('PORT','8089')+'/',timeout=3)\nexcept e.HTTPError: pass"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  currency-data:

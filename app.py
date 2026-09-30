@@ -19,8 +19,11 @@ import urllib.request
 from flask import Flask, Response, jsonify, redirect, render_template, request, send_from_directory, url_for
 
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_FILE = os.path.join(APP_DIR, "data.json")
-FLAGS_DIR = os.path.join(APP_DIR, "static", "flags")
+# DATA_DIR (used by Docker) moves data.json and flags onto a volume; unset = next to the code.
+DATA_DIR = os.environ.get("DATA_DIR", "")
+DATA_FILE = os.path.join(DATA_DIR or APP_DIR, "data.json")
+FLAGS_DIR = os.path.join(DATA_DIR, "flags") if DATA_DIR else os.path.join(APP_DIR, "static", "flags")
+os.makedirs(FLAGS_DIR, exist_ok=True)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 if not ADMIN_PASSWORD:
     raise RuntimeError("ADMIN_PASSWORD is not set (see .env.example)")
