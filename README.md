@@ -15,20 +15,22 @@ Payload: `{schema:1, version:int, updated_at, settings:{...}, currencies:[{code,
 
 ## Docker
 
+    mkdir -p data                    # once (must be owned by uid 1000, i.e. normally you)
     docker compose up -d --build     # after every git pull
     docker compose logs -f
-    docker compose down              # keeps data. NEVER use `down -v` (deletes the data volume)
+    docker compose down              # safe: data is in ./data, not in the container
 
-Data (`data.json`, its `.bak`, flags) lives in the named volume `currency-server-data`.
+Settings live in the plain local folder `./data/` (`data.json`, its `.bak`, `flags/`); it is
+gitignored, so `git pull` never touches it. Back it up with `cp -a data data.backup`.
+If the log says `NOTICE: no /data/data.json yet`, the server started with defaults.
 
-Backup / restore:
+Import existing data:
 
-    docker run --rm -v currency-server-data:/d -v "$PWD":/b alpine tar czf /b/backup.tgz -C /d .
-    docker run --rm -v currency-server-data:/d -v "$PWD":/b alpine tar xzf /b/backup.tgz -C /d
-
-Import existing local data (from `./run.sh`) into the volume:
-
-    docker run --rm -v currency-server-data:/d -v "$PWD":/s alpine sh -c 'cp /s/data.json /d/ && mkdir -p /d/flags && cp /s/static/flags/*.png /d/flags/ 2>/dev/null; chown -R 1000 /d'
+    cp data.json data/                                       # from a previous ./run.sh
+    mkdir -p data/flags && cp static/flags/*.png data/flags/ 2>/dev/null
+    # from the old Docker volume (versions before 0.3.0):
+    docker run --rm -v currency-server_currency-data:/from -v "$PWD/data":/to alpine cp -a /from/. /to/
 
 Health: `/healthz`. The app also self-checks it and exits after 3 failures, so Docker restarts it.
 Admin login uses HTTP Basic auth: put it behind HTTPS (reverse proxy) if it is not on a trusted LAN.
+Version: see `VERSION` (shown in the admin page and as `server_version` in the payload).

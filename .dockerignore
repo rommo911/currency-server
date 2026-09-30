@@ -5,3 +5,4 @@ __pycache__
 data.json
 static/flags
 *.md
+data

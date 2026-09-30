@@ -9,7 +9,7 @@
 <body>
 <div class="wrap">
   <h1>Currency Server</h1>
-  <p class="sub">Payload version <b>{{ d.version }}</b> · <a href="{{ url_for('payload') }}" target="_blank">/api/payload</a></p>
+  <p class="sub">Server v{{ server_version }} · Payload version <b>{{ d.version }}</b> · <a href="{{ url_for('payload') }}" target="_blank">/api/payload</a></p>
   {% if msg %}<div class="msg ok">{{ msg }}</div>{% endif %}
   {% if error %}<div class="msg err">{{ error }}</div>{% endif %}
   <div class="card">

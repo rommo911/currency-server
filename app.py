@@ -32,6 +32,13 @@ if not ADMIN_PASSWORD:
 if ADMIN_PASSWORD == "changeme123":
     print("WARNING: ADMIN_PASSWORD is still the example value - change it in .env", file=sys.stderr)
 PORT = int(os.environ.get("PORT", "8089"))
+try:
+    with open(os.path.join(APP_DIR, "VERSION"), encoding="utf-8") as _f:
+        VERSION = _f.read().strip() or "unknown"
+except OSError:
+    VERSION = "unknown"
+if not os.path.exists(DATA_FILE):
+    print(f"NOTICE: no {DATA_FILE} yet - starting with default settings (first run, or the data folder/volume is not the one you expect)", file=sys.stderr, flush=True)
 API_TOKEN = os.environ.get("API_TOKEN", "")  # optional: if set, /api/payload needs "Authorization: Bearer <token>"
 
 SCHEMA = 1  # payload format; client rejects other values
@@ -241,6 +248,7 @@ def payload():
     base = request.url_root.rstrip("/")
     resp = jsonify({
         "schema": SCHEMA,
+        "server_version": VERSION,
         "version": d["version"],
         "updated_at": d["updated_at"],
         "settings": d["settings"],
@@ -270,7 +278,7 @@ def admin():
     if not auth_ok():
         return deny()
     d = load()
-    return render_template("admin.html", d=d, clients=recent_clients(), ago_text=ago_text, s=d["settings"], palettes=PALETTES, csrf=CSRF,
+    return render_template("admin.html", d=d, clients=recent_clients(), ago_text=ago_text, s=d["settings"], server_version=VERSION, palettes=PALETTES, csrf=CSRF,
                            msg=request.args.get("msg"), error=request.args.get("error"),
                            lim=dict(title=MAX_TITLE, subtitle=MAX_SUBTITLE, name=MAX_NAME, symbol=MAX_SYMBOL, code=MAX_CODE))
 

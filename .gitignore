@@ -4,3 +4,4 @@ static/flags/*
 !static/flags/.gitkeep
 venv/
 __pycache__/
+data/

@@ -1,5 +1,3 @@
-# Pinned names: the project and volume names must never depend on the folder name,
-# or renaming the folder would silently mount an empty volume (= "lost" data).
 name: currency-server
 
 services:
@@ -14,7 +12,8 @@ services:
     ports:
       - "${PORT:-8089}:${PORT:-8089}"
     volumes:
-      - currency-data:/data     # data.json + flags survive rebuilds; never `down -v`
+      - ./data:/data            # settings live in ./data/data.json (+ .bak, flags/): a plain local folder
+
     read_only: true
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
@@ -28,7 +27,3 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-
-volumes:
-  currency-data:
-    name: currency-server-data
