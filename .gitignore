@@ -1,0 +1,6 @@
+.env
+data.json
+static/flags/*
+!static/flags/.gitkeep
+venv/
+__pycache__/
