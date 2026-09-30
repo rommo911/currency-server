@@ -1,21 +1,34 @@
+# Pinned names: the project and volume names must never depend on the folder name,
+# or renaming the folder would silently mount an empty volume (= "lost" data).
+name: currency-server
+
 services:
   currency-server:
     build: .
     container_name: currency-server
     restart: unless-stopped
+    init: true                  # proper SIGTERM handling -> clean `docker stop`
     env_file: .env              # ADMIN_PASSWORD, PORT, API_TOKEN (same file as ./run.sh)
     environment:
       PORT: ${PORT:-8089}       # container listens on the same port it publishes
     ports:
       - "${PORT:-8089}:${PORT:-8089}"
     volumes:
-      - currency-data:/data     # data.json + flags survive rebuilds
+      - currency-data:/data     # data.json + flags survive rebuilds; never `down -v`
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
     healthcheck:
-      # any HTTP answer (even 401) means the server is up
-      test: ["CMD", "python", "-c", "import urllib.request as u,urllib.error as e,os\ntry: u.urlopen('http://localhost:'+os.environ.get('PORT','8089')+'/',timeout=3)\nexcept e.HTTPError: pass"]
+      # /healthz: data readable + data dir writable. The app's own watchdog also exits (-> restart) if it fails 3x.
+      test: ["CMD", "python", "-c", "import os,urllib.request as u; u.urlopen('http://127.0.0.1:'+os.environ.get('PORT','8089')+'/healthz',timeout=3)"]
       interval: 30s
       timeout: 5s
       retries: 3
+      start_period: 10s
 
 volumes:
   currency-data:
+    name: currency-server-data

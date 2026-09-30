@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Currency data server: admin panel + public JSON payload for dashboards.
 
-GET /api/payload  -> the payload (public, no auth)
+GET /api/payload  -> the payload (public, or Bearer token if API_TOKEN is set)
 GET /admin        -> edit form (Basic auth); every save bumps `version`
 GET /flags/<file> -> uploaded/fetched flag images
 """
@@ -11,6 +11,8 @@ import json
 import os
 import re
 import secrets
+import shutil
+import sys
 import threading
 import time
 import unicodedata
@@ -27,12 +29,18 @@ os.makedirs(FLAGS_DIR, exist_ok=True)
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 if not ADMIN_PASSWORD:
     raise RuntimeError("ADMIN_PASSWORD is not set (see .env.example)")
+if ADMIN_PASSWORD == "changeme123":
+    print("WARNING: ADMIN_PASSWORD is still the example value - change it in .env", file=sys.stderr)
 PORT = int(os.environ.get("PORT", "8089"))
 API_TOKEN = os.environ.get("API_TOKEN", "")  # optional: if set, /api/payload needs "Authorization: Bearer <token>"
 
 SCHEMA = 1  # payload format; client rejects other values
 PALETTES = ["midnight", "emerald", "sunset", "pearl"]
 MAX_TITLE, MAX_SUBTITLE, MAX_NAME, MAX_SYMBOL, MAX_CODE, MAX_PRICE = 80, 140, 25, 3, 5, 1_000_000
+MAX_CURRENCIES = 40  # dashboards reject a payload with more, so never publish more
+MAX_CLIENTS = 1000  # cap on the in-memory client list
+ADMIN_MAX_FAILURES, ADMIN_LOCK_WINDOW = 5, 300
+WATCHDOG_INTERVAL = int(os.environ.get("WATCHDOG_INTERVAL", "30"))
 FX = ["fx_glass", "fx_scan", "fx_flash", "fx_glow"]
 
 CLIENT_WINDOW = 3600  # seconds a client stays listed after its last pull
@@ -56,21 +64,55 @@ DEFAULT = {
 }
 
 
+def _normalize(d):
+    """Tolerate files from older/newer versions: fill in anything missing."""
+    d = d if isinstance(d, dict) else {}
+    d["version"] = d["version"] if isinstance(d.get("version"), int) else 1
+    d.setdefault("updated_at", 0)
+    d["settings"] = {**DEFAULT["settings"], **(d.get("settings") or {})}
+    d.setdefault("currencies", [])
+    return d
+
+
 def load():
+    """data.json -> data.json.bak -> defaults. A corrupt file is kept aside, never overwritten silently."""
     try:
         with open(DATA_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return json.loads(json.dumps(DEFAULT))
+            return _normalize(json.load(f))
+    except FileNotFoundError:
+        return _normalize(json.loads(json.dumps(DEFAULT)))  # first run
+    except (OSError, ValueError) as e:
+        print(f"ERROR: cannot read {DATA_FILE}: {e}", file=sys.stderr)
+    try:
+        with open(DATA_FILE + ".bak", encoding="utf-8") as f:
+            print("Recovered from data.json.bak", file=sys.stderr)
+            return _normalize(json.load(f))
+    except (OSError, ValueError):
+        pass
+    try:
+        shutil.copyfile(DATA_FILE, f"{DATA_FILE}.corrupt-{int(time.time())}")
+    except OSError:
+        pass
+    d = _normalize(json.loads(json.dumps(DEFAULT)))
+    d["version"] = int(time.time())  # keep versions increasing so dashboards accept the reset
+    return d
 
 
 def save(data):
     data["version"] += 1
     data["updated_at"] = int(time.time())
     tmp = DATA_FILE + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, DATA_FILE)  # atomic: readers never see a half-written file
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+            f.flush()
+            os.fsync(f.fileno())
+        if os.path.exists(DATA_FILE):
+            shutil.copyfile(DATA_FILE, DATA_FILE + ".bak")  # last known good
+        os.replace(tmp, DATA_FILE)  # atomic: readers never see a half-written file
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
 
 
 def clean_text(raw, max_len):
@@ -115,6 +157,9 @@ def record_client():
     version = clean_text(request.headers.get("X-Client-Version"), 30) or "?"
     now = time.time()
     with _clients_lock:
+        if len(clients) >= MAX_CLIENTS and key not in clients:
+            for k in [k for k, c in clients.items() if now - c["last_seen"] > CLIENT_WINDOW] or [min(clients, key=lambda k: clients[k]["last_seen"])]:
+                del clients[k]
         c = clients.setdefault(key, {"first_seen": now, "pulls": 0})
         c.update(name=name or "?", ip=ip, version=version, last_seen=now)
         c["pulls"] += 1
@@ -133,13 +178,56 @@ def ago_text(s):
     return f"{s}s" if s < 60 else f"{s // 60}m {s % 60}s"
 
 
+_fails = {}  # ip -> failure timestamps (in memory)
+_fails_lock = threading.Lock()
+
+
 def auth_ok():
+    """True if admin credentials are valid. Repeated failures from one IP are locked out for a while."""
+    ip, now = request.remote_addr or "?", time.time()
+    with _fails_lock:
+        recent = [t for t in _fails.get(ip, []) if now - t < ADMIN_LOCK_WINDOW]
+        _fails[ip] = recent
+        if len(recent) >= ADMIN_MAX_FAILURES:
+            return False
     a = request.authorization
-    return bool(a) and hmac.compare_digest(a.password or "", ADMIN_PASSWORD)
+    if a and hmac.compare_digest(a.password or "", ADMIN_PASSWORD):
+        return True
+    with _fails_lock:
+        _fails.setdefault(ip, []).append(now)
+        if len(_fails) > 5000:  # bound memory
+            _fails.clear()
+    return False
 
 
 def deny():
+    ip, now = request.remote_addr or "?", time.time()
+    with _fails_lock:
+        locked = len([t for t in _fails.get(ip, []) if now - t < ADMIN_LOCK_WINDOW]) >= ADMIN_MAX_FAILURES
+    if locked:
+        return Response("Too many failed logins. Try again in a few minutes.", 429, {"Retry-After": str(ADMIN_LOCK_WINDOW)})
     return Response("Authentication required.", 401, {"WWW-Authenticate": 'Basic realm="Currency Server"'})
+
+
+@app.after_request
+def security_headers(resp):
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "no-referrer"
+    resp.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self' data:; style-src 'self'; frame-ancestors 'none'"
+    return resp
+
+
+@app.route("/healthz")
+def healthz():
+    """Liveness for Docker and the watchdog: data readable and the data dir writable. Not counted as a client."""
+    if not os.access(os.path.dirname(DATA_FILE), os.W_OK):
+        return Response("data dir not writable", 500)
+    try:
+        load()
+    except Exception as e:  # noqa: BLE001
+        return Response(f"data error: {e}", 500)
+    return Response("ok", 200, {"Cache-Control": "no-store"})
 
 
 @app.route("/api/payload")
@@ -209,7 +297,11 @@ def admin_save():
         return fail("Invalid palette")
 
     currencies, seen = [], set()
-    for i in range(int(f.get("rows", "0")) + 1):  # +1 = the blank "add" row
+    try:
+        rows = min(max(int(f.get("rows", "0")), 0), 200)
+    except ValueError:
+        return fail("Bad form data, reload the page")
+    for i in range(rows + 1):  # +1 = the blank "add" row
         code = re.sub(r"[^A-Za-z0-9]", "", f.get(f"code_{i}", "")).upper()[:MAX_CODE]
         if not code or f.get(f"remove_{i}"):
             continue
@@ -239,6 +331,9 @@ def admin_save():
         currencies.append({"code": code, "name": name, "symbol": symbol, "price": price,
                            "flag": flag, "enabled": bool(f.get(f"enabled_{i}"))})
 
+    if len(currencies) > MAX_CURRENCIES:
+        return fail(f"Too many currencies (max {MAX_CURRENCIES})")
+
     with _lock:
         d = load()
         d["settings"] = {"title": title, "subtitle": subtitle, "color_palette": palette,
@@ -248,5 +343,25 @@ def admin_save():
     return redirect(url_for("admin", msg=f"Saved. Payload version is now {d['version']}"))
 
 
+def watchdog():
+    """Self-check /healthz; after 3 failures in a row exit so Docker (restart: unless-stopped) restarts us."""
+    fails = 0
+    while True:
+        time.sleep(WATCHDOG_INTERVAL)
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{PORT}/healthz", timeout=5).read()
+            fails = 0
+        except Exception as e:  # noqa: BLE001
+            fails += 1
+            print(f"watchdog: health check failed ({fails}/3): {e}", file=sys.stderr, flush=True)
+            if fails >= 3:
+                os._exit(1)
+
+
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=PORT, threaded=True)
+    threading.Thread(target=watchdog, daemon=True).start()
+    try:
+        from waitress import serve  # production server (in requirements.txt)
+        serve(app, host="0.0.0.0", port=PORT, threads=8)
+    except ImportError:  # e.g. an old ./run.sh venv without waitress
+        app.run(host="0.0.0.0", port=PORT, threaded=True)
