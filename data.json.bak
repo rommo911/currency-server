@@ -1,0 +1,128 @@
+{
+  "version": 10,
+  "updated_at": 1790863710,
+  "settings": {
+    "title": "Hello",
+    "subtitle": "Sub",
+    "color_palette": "emerald",
+    "show_updated_at": true,
+    "fx_glass": false,
+    "fx_scan": false,
+    "fx_flash": false,
+    "fx_glow": false
+  },
+  "currencies": [
+    {
+      "code": "USD",
+      "name": "US Dollar",
+      "symbol": "$",
+      "price": 290,
+      "flag": "usd.png",
+      "enabled": true
+    },
+    {
+      "code": "EUR",
+      "name": "Euro",
+      "symbol": "E",
+      "price": 170,
+      "flag": "eur.png",
+      "enabled": false
+    },
+    {
+      "code": "SYP",
+      "name": "Syrian",
+      "symbol": "",
+      "price": 159,
+      "flag": "syp.png",
+      "enabled": true
+    },
+    {
+      "code": "TR",
+      "name": "Turkish Lira",
+      "symbol": "TL",
+      "price": 669,
+      "flag": "tr.png",
+      "enabled": true
+    }
+  ],
+  "rows": [
+    {
+      "enabled": true,
+      "title": "Hello",
+      "subtitle": "Sub",
+      "currencies": [
+        {
+          "code": "USD",
+          "name": "US Dollar",
+          "symbol": "$",
+          "price": 290,
+          "flag": "usd.png",
+          "enabled": true
+        },
+        {
+          "code": "EUR",
+          "name": "Euro",
+          "symbol": "E",
+          "price": 170,
+          "flag": "eur.png",
+          "enabled": false
+        },
+        {
+          "code": "SYP",
+          "name": "Syrian",
+          "symbol": "",
+          "price": 159,
+          "flag": "syp.png",
+          "enabled": true
+        },
+        {
+          "code": "TR",
+          "name": "Turkish Lira",
+          "symbol": "TL",
+          "price": 669,
+          "flag": "tr.png",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "enabled": true,
+      "title": "Hello",
+      "subtitle": "Sub",
+      "currencies": [
+        {
+          "code": "USD",
+          "name": "US Dollar",
+          "symbol": "$",
+          "price": 290,
+          "flag": "usd.png",
+          "enabled": true
+        },
+        {
+          "code": "EUR",
+          "name": "Euro",
+          "symbol": "E",
+          "price": 170,
+          "flag": "eur.png",
+          "enabled": false
+        },
+        {
+          "code": "SYP",
+          "name": "Syrian",
+          "symbol": "",
+          "price": 159,
+          "flag": "syp.png",
+          "enabled": true
+        },
+        {
+          "code": "TR",
+          "name": "Turkish Lira",
+          "symbol": "TL",
+          "price": 669,
+          "flag": "tr.png",
+          "enabled": true
+        }
+      ]
+    }
+  ]
+}

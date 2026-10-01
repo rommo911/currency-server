@@ -23,13 +23,44 @@
     </table></div>
     {% else %}<p class="sub">No client has pulled yet.</p>{% endif %}
   </div>
+  {% macro row_card(n, r) %}
+    {% set p = 'r' ~ n ~ '_' %}
+    <div class="card">
+      <h2>Row {{ n + 1 }}</h2>
+      <input type="hidden" name="{{ p }}rows" value="{{ r.currencies|length }}">
+      <label class="chk"><input type="checkbox" name="{{ p }}enabled" {% if r.enabled %}checked{% endif %}> Row enabled</label>
+      <label>Title <input name="{{ p }}title" value="{{ r.title }}" maxlength="{{ lim.title }}"></label>
+      <label>Subtitle <input name="{{ p }}subtitle" value="{{ r.subtitle }}" maxlength="{{ lim.subtitle }}"></label>
+      <h2>Currencies (2&ndash;{{ row_max }})</h2>
+      {% for c in r.currencies + ([{}] if r.currencies|length < row_max else []) %}
+      {% set idx = loop.index0 %}{% set last = r.currencies|length - 1 %}
+      <div class="row">
+        {% if c.code %}
+        <span class="mv">
+          <button type="submit" name="move" value="{{ p }}{{ idx }}_up" title="Move up" {% if idx == 0 %}disabled{% endif %}>&uarr;</button>
+          <button type="submit" name="move" value="{{ p }}{{ idx }}_down" title="Move down" {% if idx == last %}disabled{% endif %}>&darr;</button>
+        </span>
+        {% else %}<span class="mv"></span>{% endif %}
+        {% if c.flag %}<img src="{{ url_for('flags', name=c.flag) }}" alt="">{% else %}<span class="noflag"></span>{% endif %}
+        <input type="hidden" name="{{ p }}flag_{{ loop.index0 }}" value="{{ c.flag or '' }}">
+        <input name="{{ p }}code_{{ loop.index0 }}" value="{{ c.code or '' }}" placeholder="{{ 'Code (new)' if not c.code else '' }}" maxlength="{{ lim.code }}" size="6">
+        <input name="{{ p }}name_{{ loop.index0 }}" value="{{ c.name or '' }}" placeholder="Name" maxlength="{{ lim.name }}">
+        <input name="{{ p }}symbol_{{ loop.index0 }}" value="{{ c.symbol or '' }}" placeholder="Sym" maxlength="{{ lim.symbol }}" size="3">
+        <input name="{{ p }}price_{{ loop.index0 }}" value="{{ c.price if c.price is defined else '' }}" placeholder="Price" inputmode="decimal" pattern="[0-9]{1,8}(\.[0-9]{1,2})?" size="10">
+        <label class="chk"><input type="checkbox" name="{{ p }}enabled_{{ loop.index0 }}" {% if c.enabled is not defined or c.enabled %}checked{% endif %}> on</label>
+        <input type="file" name="{{ p }}upload_{{ loop.index0 }}" accept="image/png" title="Flag PNG (optional; auto-fetched if empty)">
+        {% if c.code %}<label class="chk del"><input type="checkbox" name="{{ p }}remove_{{ loop.index0 }}"> remove</label>{% endif %}
+      </div>
+      {% endfor %}
+      <p class="sub">Last row adds a new currency. Flag is auto-fetched from flagcdn.com unless you upload a PNG.</p>
+    </div>
+  {% endmacro %}
   <form method="post" action="{{ url_for('admin_save') }}" enctype="multipart/form-data">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <input type="hidden" name="rows" value="{{ d.currencies|length }}">
+    {# First submit button = what Enter does in a text field: must be Save, never a move arrow #}
+    <button class="save sr" type="submit" tabindex="-1" aria-hidden="true">Save</button>
     <div class="card">
       <h2>Dashboard settings</h2>
-      <label>Title <input name="title" value="{{ s.title }}" maxlength="{{ lim.title }}" required></label>
-      <label>Subtitle <input name="subtitle" value="{{ s.subtitle }}" maxlength="{{ lim.subtitle }}"></label>
       <label>Palette
         <select name="color_palette">{% for p in palettes %}<option {% if s.color_palette == p %}selected{% endif %}>{{ p }}</option>{% endfor %}</select>
       </label>
@@ -39,23 +70,7 @@
       <label class="chk"><input type="checkbox" name="fx_flash" {% if s.fx_flash %}checked{% endif %}> Flash on change</label>
       <label class="chk"><input type="checkbox" name="fx_glow" {% if s.fx_glow %}checked{% endif %}> Glow pulse</label>
     </div>
-    <div class="card">
-      <h2>Currencies</h2>
-      {% for c in d.currencies + [{}] %}
-      <div class="row">
-        {% if c.flag %}<img src="{{ url_for('flags', name=c.flag) }}" alt="">{% else %}<span class="noflag"></span>{% endif %}
-        <input type="hidden" name="flag_{{ loop.index0 }}" value="{{ c.flag or '' }}">
-        <input name="code_{{ loop.index0 }}" value="{{ c.code or '' }}" placeholder="{{ 'Code (new)' if not c.code else '' }}" maxlength="{{ lim.code }}" size="6">
-        <input name="name_{{ loop.index0 }}" value="{{ c.name or '' }}" placeholder="Name" maxlength="{{ lim.name }}">
-        <input name="symbol_{{ loop.index0 }}" value="{{ c.symbol or '' }}" placeholder="Sym" maxlength="{{ lim.symbol }}" size="3">
-        <input name="price_{{ loop.index0 }}" value="{{ c.price|round|int if c.price is defined else '' }}" placeholder="Price" inputmode="numeric" pattern="[0-9]*" size="10">
-        <label class="chk"><input type="checkbox" name="enabled_{{ loop.index0 }}" {% if c.enabled is not defined or c.enabled %}checked{% endif %}> on</label>
-        <input type="file" name="upload_{{ loop.index0 }}" accept="image/png" title="Flag PNG (optional; auto-fetched if empty)">
-        {% if c.code %}<label class="chk del"><input type="checkbox" name="remove_{{ loop.index0 }}"> remove</label>{% endif %}
-      </div>
-      {% endfor %}
-      <p class="sub">Last row adds a new currency. Flag is auto-fetched from flagcdn.com unless you upload a PNG.</p>
-    </div>
+    {% for r in d.rows %}{{ row_card(loop.index0, r) }}{% endfor %}
     <button class="save" type="submit">Save &amp; publish</button>
   </form>
 </div>

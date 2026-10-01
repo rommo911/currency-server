@@ -12,3 +12,7 @@ input,select{background:#0f1420;color:#e8ecf4;border:1px solid #2c3854;border-ra
 .save{background:#3b7bff;color:#fff;border:0;border-radius:10px;padding:12px 24px;font:inherit;cursor:pointer}
 .msg{padding:10px 14px;border-radius:8px;margin:12px 0}.ok{background:#153d2a}.err{background:#4a1c1c}
 .tbl{overflow-x:auto}table{border-collapse:collapse;width:100%}th,td{text-align:left;padding:6px 10px;border-top:1px solid #2c3854;white-space:nowrap}th{color:#8a94a8;font-weight:normal}
+.mv{display:flex;flex-direction:column;gap:2px;width:26px}
+.mv button{background:#0f1420;color:#e8ecf4;border:1px solid #2c3854;border-radius:5px;padding:0;height:18px;line-height:1;cursor:pointer;font-size:12px}
+.mv button:disabled{opacity:.25;cursor:default}
+.sr{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}

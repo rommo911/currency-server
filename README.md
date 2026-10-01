@@ -10,7 +10,7 @@ Admin edits title/subtitle/palette/effects/currencies; dashboards pull `GET /api
 
 Admin also lists the dashboards that pulled in the last hour (by client ID, in memory).
 
-Payload: `{schema:1, version:int, updated_at, settings:{...}, currencies:[{code,name,symbol,price,enabled,flag(url|null)}]}`.
+Payload: `{schema:1, server_version, version:int, updated_at, settings:{...}, currencies:[...], rows:[{enabled,title,subtitle,currencies:[{code,name,symbol,price,enabled,flag(url|null)}]} x2]}`. `settings.title/subtitle` + flat `currencies` mirror the first enabled row so dashboards from before two-row support keep working; each row holds 2-4 currencies.
 `version` increments on every save. `data.json` is created on first save.
 
 ## Workspace
