@@ -1,0 +1,4 @@
+[submodule "dashboard"]
+	path = dashboard
+	url = https://github.com/rommo911/rpi_dash_currency.git
+	branch = centralized-admin

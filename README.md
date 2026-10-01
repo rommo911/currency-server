@@ -13,6 +13,14 @@ Admin also lists the dashboards that pulled in the last hour (by client ID, in m
 Payload: `{schema:1, version:int, updated_at, settings:{...}, currencies:[{code,name,symbol,price,enabled,flag(url|null)}]}`.
 `version` increments on every save. `data.json` is created on first save.
 
+## Workspace
+
+`dashboard/` is a git submodule (rpi_dash_currency, branch `centralized-admin`).
+
+    git clone --recurse-submodules https://github.com/rommo911/currency-server.git
+    git submodule update --init      # in an existing clone
+    git submodule update --remote    # pull the latest dashboard
+
 ## Docker
 
     mkdir -p data                    # once (must be owned by uid 1000, i.e. normally you)
