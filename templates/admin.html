@@ -16,9 +16,9 @@
     <h2>Clients pulled in the last hour: {{ clients|length }}</h2>
     {% if clients %}
     <div class="tbl"><table>
-      <tr><th>Name</th><th>ID</th><th>IP</th><th>Version</th><th>Last pull</th><th>Pulls</th></tr>
+      <tr><th>Name</th><th>ID</th><th>IP (seen)</th><th>Local IP (reported)</th><th>Version</th><th>Last pull</th><th>Pulls</th></tr>
       {% for c in clients %}
-      <tr><td>{{ c.name }}</td><td>{{ c.id[:8] }}</td><td>{{ c.ip }}</td><td>{{ c.version }}</td><td>{{ ago_text(c.ago) }} ago</td><td>{{ c.pulls }}</td></tr>
+      <tr><td>{{ c.name }}</td><td>{{ c.id[:8] }}</td><td>{{ c.ip }}</td><td>{{ c.local_ip }}</td><td>{{ c.version }}</td><td>{{ ago_text(c.ago) }} ago</td><td>{{ c.pulls }}</td></tr>
       {% endfor %}
     </table></div>
     {% else %}<p class="sub">No client has pulled yet.</p>{% endif %}

@@ -7,6 +7,7 @@ GET /flags/<file> -> uploaded/fetched flag images
 """
 import hashlib
 import hmac
+import ipaddress
 import json
 import os
 import re
@@ -216,13 +217,17 @@ def record_client():
     key = cid or f"ip:{ip}"
     name = clean_text(request.headers.get("X-Client-Name"), 40) or ("unknown (old client)" if not cid else "?")
     version = clean_text(request.headers.get("X-Client-Version"), 30) or "?"
+    try:  # self-reported LAN address (informational only): keep it only if it is a real IP
+        local_ip = str(ipaddress.ip_address((request.headers.get("X-Client-IP") or "").strip()))
+    except ValueError:
+        local_ip = "-"
     now = time.time()
     with _clients_lock:
         if len(clients) >= MAX_CLIENTS and key not in clients:
             for k in [k for k, c in clients.items() if now - c["last_seen"] > CLIENT_WINDOW] or [min(clients, key=lambda k: clients[k]["last_seen"])]:
                 del clients[k]
         c = clients.setdefault(key, {"first_seen": now, "pulls": 0})
-        c.update(name=name or "?", ip=ip, version=version, last_seen=now)
+        c.update(name=name or "?", ip=ip, local_ip=local_ip, version=version, last_seen=now)
         c["pulls"] += 1
 
 
