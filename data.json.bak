@@ -1,128 +1,196 @@
 {
-  "version": 10,
-  "updated_at": 1790863710,
+  "version": 39,
+  "updated_at": 1791283246,
   "settings": {
-    "title": "Hello",
-    "subtitle": "Sub",
+    "title": "⚡ سعر الكهرباء",
+    "subtitle": "بالعملات",
     "color_palette": "emerald",
     "show_updated_at": true,
+    "layout": "cards",
     "fx_glass": false,
     "fx_scan": false,
-    "fx_flash": false,
-    "fx_glow": false
+    "fx_flash": true,
+    "fx_glow": true
   },
   "currencies": [
     {
-      "code": "USD",
-      "name": "US Dollar",
-      "symbol": "$",
-      "price": 290,
-      "flag": "usd.png",
-      "enabled": true
-    },
-    {
-      "code": "EUR",
-      "name": "Euro",
-      "symbol": "E",
-      "price": 170,
-      "flag": "eur.png",
-      "enabled": false
-    },
-    {
       "code": "SYP",
-      "name": "Syrian",
+      "name": "ل.س.ج",
       "symbol": "",
-      "price": 159,
+      "price": 15490,
       "flag": "syp.png",
       "enabled": true
     },
     {
+      "code": "USD",
+      "name": "دولار امريكي",
+      "symbol": "$",
+      "price": 290.3,
+      "flag": "usd.png",
+      "enabled": true
+    },
+    {
       "code": "TR",
-      "name": "Turkish Lira",
-      "symbol": "TL",
-      "price": 669,
+      "name": "ليرة تركية",
+      "symbol": "₺",
+      "price": 1690,
       "flag": "tr.png",
       "enabled": true
+    },
+    {
+      "code": "EUR",
+      "name": "يورو",
+      "symbol": "€",
+      "price": 170.1,
+      "flag": "eur.png",
+      "enabled": false
     }
   ],
   "rows": [
     {
       "enabled": true,
-      "title": "Hello",
-      "subtitle": "Sub",
+      "title": "⚡ سعر الكهرباء",
+      "subtitle": "بالعملات",
       "currencies": [
         {
-          "code": "USD",
-          "name": "US Dollar",
-          "symbol": "$",
-          "price": 290,
-          "flag": "usd.png",
-          "enabled": true
-        },
-        {
-          "code": "EUR",
-          "name": "Euro",
-          "symbol": "E",
-          "price": 170,
-          "flag": "eur.png",
-          "enabled": false
-        },
-        {
           "code": "SYP",
-          "name": "Syrian",
+          "name": "ل.س.ج",
           "symbol": "",
-          "price": 159,
+          "price": 15490,
           "flag": "syp.png",
           "enabled": true
         },
         {
+          "code": "USD",
+          "name": "دولار امريكي",
+          "symbol": "$",
+          "price": 290.3,
+          "flag": "usd.png",
+          "enabled": true
+        },
+        {
           "code": "TR",
-          "name": "Turkish Lira",
-          "symbol": "TL",
-          "price": 669,
+          "name": "ليرة تركية",
+          "symbol": "₺",
+          "price": 1690,
           "flag": "tr.png",
           "enabled": true
+        },
+        {
+          "code": "EUR",
+          "name": "يورو",
+          "symbol": "€",
+          "price": 170.1,
+          "flag": "eur.png",
+          "enabled": false
         }
       ]
     },
     {
       "enabled": true,
-      "title": "Hello",
-      "subtitle": "Sub",
+      "title": "🚰 سعر الماء",
+      "subtitle": "بالعملات",
       "currencies": [
         {
-          "code": "USD",
-          "name": "US Dollar",
-          "symbol": "$",
-          "price": 290,
-          "flag": "usd.png",
-          "enabled": true
-        },
-        {
-          "code": "EUR",
-          "name": "Euro",
-          "symbol": "E",
-          "price": 170,
-          "flag": "eur.png",
-          "enabled": false
-        },
-        {
           "code": "SYP",
-          "name": "Syrian",
+          "name": "ل.س.ج",
           "symbol": "",
-          "price": 159,
+          "price": 2590,
           "flag": "syp.png",
           "enabled": true
         },
         {
+          "code": "USD",
+          "name": "دولار امريكي",
+          "symbol": "$",
+          "price": 110.1,
+          "flag": "usd.png",
+          "enabled": true
+        },
+        {
           "code": "TR",
-          "name": "Turkish Lira",
-          "symbol": "TL",
+          "name": "ليرة تركية",
+          "symbol": "₺",
           "price": 669,
           "flag": "tr.png",
           "enabled": true
+        },
+        {
+          "code": "EUR",
+          "name": "يورو",
+          "symbol": "€",
+          "price": 100,
+          "flag": "eur.png",
+          "enabled": false
         }
       ]
     }
-  ]
+  ],
+  "matrix": {
+    "currencies": [
+      {
+        "code": "SYP",
+        "name": "ل.س.ج",
+        "symbol": "",
+        "flag": "syp.png",
+        "enabled": true
+      },
+      {
+        "code": "USD",
+        "name": "دولار امريكي",
+        "symbol": "$",
+        "flag": "usd.png",
+        "enabled": true
+      },
+      {
+        "code": "TR",
+        "name": "ليرة تركية",
+        "symbol": "₺",
+        "flag": "tr.png",
+        "enabled": true
+      },
+      {
+        "code": "EUR",
+        "name": "يورو",
+        "symbol": "€",
+        "flag": "eur.png",
+        "enabled": false
+      }
+    ],
+    "rows": [
+      {
+        "enabled": true,
+        "title": "⚡ سعر الكهرباء",
+        "subtitle": "بالامبير",
+        "prices": {
+          "SYP": 15490,
+          "USD": 290.9,
+          "TR": 1690,
+          "EUR": 170.3
+        }
+      },
+      {
+        "enabled": true,
+        "title": "🚰 سعر الماء",
+        "subtitle": "باللتر مكعب",
+        "prices": {
+          "SYP": 2590,
+          "USD": 110.1,
+          "TR": 669,
+          "EUR": 100
+        }
+      },
+      {
+        "enabled": false,
+        "title": "⚡ سعر الهواء",
+        "subtitle": "بالمتر مكعب",
+        "prices": {
+          "SYP": 15490,
+          "USD": 290.3,
+          "TR": 1690,
+          "EUR": 170.1
+        }
+      }
+    ]
+  }
 }

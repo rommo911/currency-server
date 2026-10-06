@@ -16,3 +16,14 @@ input,select{background:#0f1420;color:#e8ecf4;border:1px solid #2c3854;border-ra
 .mv button{background:#0f1420;color:#e8ecf4;border:1px solid #2c3854;border-radius:5px;padding:0;height:18px;line-height:1;cursor:pointer;font-size:12px}
 .mv button:disabled{opacity:.25;cursor:default}
 .sr{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.opts{display:flex;gap:12px;flex-wrap:wrap}
+.opt{flex:1 1 260px;display:flex;flex-direction:column;gap:8px;align-items:flex-start;text-align:left;background:#0f1420;color:#e8ecf4;border:2px solid #2c3854;border-radius:12px;padding:14px;font:inherit;cursor:pointer}
+.opt span:last-child{color:#8a94a8;font-size:13px}
+.opt.on{border-color:#3b7bff;background:#16233f}
+.mini{display:grid;gap:3px;width:90px;height:44px;padding:4px;background:#182033;border-radius:6px}
+.mini.cards{grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr}
+.mini.matrix{grid-template-columns:1.6fr 1fr 1fr 1fr;grid-template-rows:repeat(3,1fr)}
+.mini i{background:#3b7bff;border-radius:2px;opacity:.7}
+.mini.cards i:nth-child(3){grid-column:span 1}
+.prices{display:flex;flex-wrap:wrap;gap:12px}
+.prices label{flex:1 1 120px}

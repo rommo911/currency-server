@@ -46,7 +46,9 @@ SCHEMA = 1  # payload format; client rejects other values
 PALETTES = ["midnight", "emerald", "sunset", "pearl"]
 MAX_TITLE, MAX_SUBTITLE, MAX_NAME, MAX_SYMBOL, MAX_CODE, MAX_PRICE = 80, 140, 25, 3, 5, 1_000_000
 ROW_MIN, ROW_MAX = 2, 4  # currencies per enabled row (dashboards show at most 4 per row)
-ROWS = 2
+ROWS = 2  # card layout: up to 2 independent rows
+LAYOUTS = ("cards", "matrix")
+MROWS, MROWS_MIN = 3, 2  # matrix layout: 2-3 rows sharing ONE currency list
 MAX_CLIENTS = 1000  # cap on the in-memory client list
 ADMIN_MAX_FAILURES, ADMIN_LOCK_WINDOW = 5, 300
 WATCHDOG_INTERVAL = int(os.environ.get("WATCHDOG_INTERVAL", "30"))
@@ -73,7 +75,7 @@ DEFAULT = {
     "version": 1,
     "updated_at": 0,
     "settings": {"title": "Prices Dashboard", "subtitle": "Current prices", "color_palette": "midnight",
-                 "show_updated_at": True, **{k: True for k in FX}},
+                 "show_updated_at": True, "layout": "cards", **{k: True for k in FX}},
     "rows": [
         {"enabled": True, "title": "Prices Dashboard", "subtitle": "Current prices", "currencies": _default_currencies()},
         {"enabled": False, "title": "", "subtitle": "", "currencies": _default_currencies()},
@@ -99,9 +101,75 @@ def _norm_row(r):
             "subtitle": str(r.get("subtitle") or ""), "currencies": cur}
 
 
+def _copy(x):
+    return json.loads(json.dumps(x))
+
+
+def rows_to_matrix(rows):
+    """Matrix layout data seeded from card rows: the shared currency list is row 1's, each row keeps
+    the prices it had for those codes (row 3 starts as a disabled copy of row 1)."""
+    defs = [{k: c[k] for k in ("code", "name", "symbol", "flag", "enabled")} for c in rows[0]["currencies"][:ROW_MAX]]
+    base = {c["code"]: c["price"] for c in rows[0]["currencies"]}
+    src = [rows[0], rows[1] if len(rows) > 1 else rows[0], rows[0]]
+    out = []
+    for n, r in enumerate(src):
+        have = {c["code"]: c["price"] for c in r["currencies"]}
+        out.append({"enabled": bool(r["enabled"]) and n < ROWS, "title": r["title"], "subtitle": r["subtitle"],
+                    "prices": {c["code"]: have.get(c["code"], base.get(c["code"], 0)) for c in defs}})
+    return {"currencies": defs, "rows": out}
+
+
+def _norm_matrix(m):
+    m = m if isinstance(m, dict) else {}
+    defs, seen = [], set()
+    for c in m.get("currencies") or []:
+        x = _norm_currency({**c, "price": 0}) if isinstance(c, dict) else None
+        if x and x["code"] not in seen and len(defs) < ROW_MAX:
+            seen.add(x["code"])
+            x.pop("price")
+            defs.append(x)
+    rows = []
+    for r in (m.get("rows") or [])[:MROWS]:
+        r = r if isinstance(r, dict) else {}
+        pr = r.get("prices") if isinstance(r.get("prices"), dict) else {}
+        prices = {}
+        for c in defs:
+            try:
+                prices[c["code"]] = norm_price(pr.get(c["code"], 0))
+            except (TypeError, ValueError, OverflowError):
+                prices[c["code"]] = 0
+        rows.append({"enabled": bool(r.get("enabled", False)), "title": str(r.get("title") or ""),
+                     "subtitle": str(r.get("subtitle") or ""), "prices": prices})
+    while len(rows) < MROWS:
+        rows.append({"enabled": False, "title": "", "subtitle": "", "prices": {c["code"]: 0 for c in defs}})
+    return {"currencies": defs, "rows": rows}
+
+
+def matrix_to_rows(m):
+    """Matrix as card-style rows (every row carries the shared currencies with its own prices)."""
+    return [{"enabled": r["enabled"], "title": r["title"], "subtitle": r["subtitle"],
+             "currencies": [{**c, "price": r["prices"].get(c["code"], 0)} for c in m["currencies"]]} for r in m["rows"]]
+
+
+def ensure_min_matrix_rows(m):
+    """A matrix needs at least MROWS_MIN enabled rows (with a title): switch on the first idle ones."""
+    for i, r in enumerate(m["rows"]):
+        if sum(x["enabled"] for x in m["rows"]) >= MROWS_MIN:
+            break
+        if not r["enabled"]:
+            r["enabled"] = True
+            r["title"] = r["title"] or f"Row {i + 1}"
+
+
+def effective_rows(d):
+    """The rows the dashboards actually show, whatever the layout."""
+    return matrix_to_rows(d["matrix"]) if d["settings"]["layout"] == "matrix" else d["rows"]
+
+
 def mirror_legacy(d):
     """Old dashboards read settings.title/subtitle + flat `currencies`: keep them equal to the first enabled row."""
-    first = next((r for r in d["rows"] if r["enabled"]), d["rows"][0])
+    rows = effective_rows(d)
+    first = next((r for r in rows if r["enabled"]), rows[0])
     d["settings"]["title"], d["settings"]["subtitle"] = first["title"], first["subtitle"]
     d["currencies"] = first["currencies"]
 
@@ -112,11 +180,13 @@ def _normalize(d):
     d["version"] = d["version"] if isinstance(d.get("version"), int) else 1
     d.setdefault("updated_at", 0)
     d["settings"] = {**DEFAULT["settings"], **(d.get("settings") or {})}
+    if d["settings"]["layout"] not in LAYOUTS:
+        d["settings"]["layout"] = "cards"
     if not isinstance(d.get("rows"), list) or not d["rows"]:
         legacy = {"enabled": True, "title": d["settings"]["title"], "subtitle": d["settings"]["subtitle"],
                   "currencies": d.get("currencies") or []}
         # Row 2 starts as a disabled copy of row 1 (as many cards as fit), ready to edit.
-        second = json.loads(json.dumps(legacy))
+        second = _copy(legacy)
         second["enabled"] = False
         second["currencies"] = second["currencies"][:ROW_MAX]
         d["rows"] = [legacy, second]
@@ -125,6 +195,16 @@ def _normalize(d):
         d["rows"].append(_norm_row({}))
     if not any(r["enabled"] for r in d["rows"]):
         d["rows"][0]["enabled"] = True
+    # The matrix is created on first use (seeded from the card rows) and kept separately afterwards,
+    # so switching layouts never overwrites the other one's data.
+    if isinstance(d.get("matrix"), dict):
+        d["matrix"] = _norm_matrix(d["matrix"])
+    elif d["settings"]["layout"] == "matrix":
+        d["matrix"] = _norm_matrix(rows_to_matrix(d["rows"]))
+    else:
+        d.pop("matrix", None)
+    if d["settings"]["layout"] == "matrix":
+        ensure_min_matrix_rows(d["matrix"])
     mirror_legacy(d)
     return d
 
@@ -313,15 +393,23 @@ def payload():
                 "price": int(round(c["price"])) if legacy else c["price"],
                 "flag": f"{base}/flags/{c['flag']}" if c.get("flag") else None}
 
+    eff = effective_rows(d)
+
+    def pub_row(r):
+        return {"enabled": r["enabled"], "title": r["title"], "subtitle": r["subtitle"],
+                "currencies": [pub(c) for c in r["currencies"][:ROW_MAX]]}
+
     resp = jsonify({
         "schema": SCHEMA,
         "server_version": VERSION,
         "version": d["version"],
         "updated_at": d["updated_at"],
-        "settings": d["settings"],  # title/subtitle = first enabled row (what old dashboards show)
+        "settings": d["settings"],  # title/subtitle = first enabled row (what old dashboards show); settings.layout = "cards"|"matrix"
         "currencies": [pub(c, True) for c in d["currencies"]],  # legacy flat list = first enabled row
-        "rows": [{"enabled": r["enabled"], "title": r["title"], "subtitle": r["subtitle"],
-                  "currencies": [pub(c) for c in r["currencies"][:ROW_MAX]]} for r in d["rows"]],
+        # `rows` stays at most 2 long so dashboards from before the matrix layout still accept it;
+        # the matrix layout's 3rd row travels in `more_rows`. settings.layout says how to draw them.
+        "rows": [pub_row(r) for r in eff[:ROWS]],
+        "more_rows": [pub_row(r) for r in eff[ROWS:]],
     })
     resp.headers["Cache-Control"] = "no-store"
     return resp
@@ -342,7 +430,7 @@ def admin():
     if not auth_ok():
         return deny()
     d = load()
-    return render_template("admin.html", d=d, clients=recent_clients(), ago_text=ago_text, s=d["settings"], row_max=ROW_MAX, server_version=VERSION, palettes=PALETTES, csrf=CSRF,
+    return render_template("admin.html", d=d, clients=recent_clients(), ago_text=ago_text, s=d["settings"], row_max=ROW_MAX, row_min=ROW_MIN, mrows_min=MROWS_MIN, server_version=VERSION, palettes=PALETTES, csrf=CSRF,
                            msg=request.args.get("msg"), error=request.args.get("error"),
                            lim=dict(title=MAX_TITLE, subtitle=MAX_SUBTITLE, name=MAX_NAME, symbol=MAX_SYMBOL, code=MAX_CODE))
 
@@ -362,24 +450,126 @@ def admin_save():
     if palette not in PALETTES:
         return fail("Invalid palette")
 
-    # "r<row>_<index>_up|down" from a card's arrow button: swap that card with its neighbour.
-    mv = re.fullmatch(r"r(\d+)_(\d+)_(up|down)", f.get("move", ""))
-    rows = []
-    for n in range(ROWS):
-        row, err = parse_row(f, n, (int(mv.group(2)), mv.group(3)) if mv and int(mv.group(1)) == n else None)
+    layout = load()["settings"]["layout"]
+    if layout == "matrix":
+        mv = re.fullmatch(r"m_(\d+)_(up|down)", f.get("move", ""))
+        matrix, err = parse_matrix(f, (int(mv.group(1)), mv.group(2)) if mv else None)
         if err:
-            return fail(f"Row {n + 1}: {err}")
-        rows.append(row)
-    if not any(r["enabled"] for r in rows):
-        return fail("Enable at least one row")
+            return fail(err)
+        rows = None
+    else:
+        # "r<row>_<index>_up|down" from a card's arrow button: swap that card with its neighbour.
+        mv = re.fullmatch(r"r(\d+)_(\d+)_(up|down)", f.get("move", ""))
+        rows = []
+        for n in range(ROWS):
+            row, err = parse_row(f, n, (int(mv.group(2)), mv.group(3)) if mv and int(mv.group(1)) == n else None)
+            if err:
+                return fail(f"Row {n + 1}: {err}")
+            rows.append(row)
+        if not any(r["enabled"] for r in rows):
+            return fail("Enable at least one row")
 
     with _lock:
         d = load()
+        if d["settings"]["layout"] != layout:
+            return fail("The layout was changed meanwhile, reload the page")
         d["settings"] = {**d["settings"], "color_palette": palette,
                          "show_updated_at": bool(f.get("show_updated_at")), **{k: bool(f.get(k)) for k in FX}}
-        d["rows"] = rows
+        if layout == "matrix":
+            d["matrix"] = matrix
+        else:
+            d["rows"] = rows
         save(d)
     return redirect(url_for("admin", msg=f"{'Moved and saved' if mv else 'Saved'}. Payload version is now {d['version']}"))
+
+
+@app.route("/admin/layout", methods=["POST"])
+def admin_layout():
+    """Switch between the card layout and the matrix layout. Each keeps its own data."""
+    if not auth_ok():
+        return deny()
+    if not hmac.compare_digest(request.form.get("csrf", ""), CSRF):
+        return redirect(url_for("admin", error="CSRF check failed, reload the page"))
+    mode = request.form.get("layout")
+    if mode not in LAYOUTS:
+        return redirect(url_for("admin", error="Invalid layout"))
+    with _lock:
+        d = load()
+        if mode == "matrix":
+            m = d.get("matrix") or _norm_matrix(rows_to_matrix(d["rows"]))  # first time: seeded from the card rows
+            if len(m["currencies"]) < ROW_MIN:
+                return redirect(url_for("admin", error=f"The matrix layout needs at least {ROW_MIN} currencies in row 1"))
+            ensure_min_matrix_rows(m)
+            d["matrix"] = m
+        d["settings"]["layout"] = mode
+        save(d)
+    return redirect(url_for("admin", msg=f"Layout: {mode}. Payload version is now {d['version']}"))
+
+
+def parse_matrix(f, move=None):
+    """Matrix form (m_* = shared currencies, mr{n}_* = rows) -> (matrix, None) or (None, error)."""
+    defs, form_idx, seen = [], [], set()
+    try:
+        count = min(max(int(f.get("m_rows", "0")), 0), 200)
+    except ValueError:
+        return None, "bad form data, reload the page"
+    for i in range(count + 1):  # +1 = the blank "add" slot
+        code = re.sub(r"[^A-Za-z0-9]", "", f.get(f"m_code_{i}", "")).upper()[:MAX_CODE]
+        if not code or f.get(f"m_remove_{i}"):
+            continue
+        if code in seen:
+            return None, f"duplicate code {code}"
+        seen.add(code)
+        name = clean_text(f.get(f"m_name_{i}"), MAX_NAME)
+        symbol = clean_text(f.get(f"m_symbol_{i}"), MAX_SYMBOL)
+        if not name or symbol is None:
+            return None, f"{code}: name required (max {MAX_NAME}), symbol max {MAX_SYMBOL}"
+        flag = f.get(f"m_flag_{i}") or None
+        if flag and not re.fullmatch(r"[a-z0-9]+\.png", flag):
+            flag = None
+        up = request.files.get(f"m_upload_{i}")
+        if up and up.filename:
+            body = up.read(500_001)
+            if not body.startswith(b"\x89PNG") or len(body) > 500_000:
+                return None, f"{code}: flag must be a PNG under 500 KB"
+            flag = f"{code.lower()}.png"
+            with open(os.path.join(FLAGS_DIR, flag), "wb") as out:
+                out.write(body)
+        elif not flag:
+            flag = flag_for(code)
+        defs.append({"code": code, "name": name, "symbol": symbol, "flag": flag, "enabled": bool(f.get(f"m_enabled_{i}"))})
+        form_idx.append(i)
+    if not ROW_MIN <= len(defs) <= ROW_MAX:
+        return None, f"the matrix needs {ROW_MIN} to {ROW_MAX} currencies"
+    rows = []
+    for n in range(MROWS):
+        p = f"mr{n}_"
+        label = f"Row {n + 1}: "
+        title = clean_text(f.get(p + "title"), MAX_TITLE)
+        subtitle = clean_text(f.get(p + "subtitle"), MAX_SUBTITLE)
+        enabled = bool(f.get(p + "enabled"))
+        if title is None:
+            return None, label + f"title too long (max {MAX_TITLE})"
+        if subtitle is None:
+            return None, label + f"subtitle too long (max {MAX_SUBTITLE})"
+        if enabled and not title:
+            return None, label + "title is required when the row is enabled"
+        prices = {}
+        for d_, i in zip(defs, form_idx):
+            raw = (f.get(f"{p}price_{i}") or "").strip()
+            price = parse_price(raw) if raw or enabled else 0  # a switched-off row may leave prices empty
+            if price is None or (not raw and enabled):
+                return None, label + f"{d_['code']}: invalid price (number 0..{MAX_PRICE:,}, up to 2 decimals)"
+            prices[d_["code"]] = price
+        rows.append({"enabled": enabled, "title": title, "subtitle": subtitle, "prices": prices})
+    if move and move[0] in form_idx:
+        k = form_idx.index(move[0])
+        j = k - 1 if move[1] == "up" else k + 1
+        if 0 <= j < len(defs):
+            defs[k], defs[j] = defs[j], defs[k]  # prices are keyed by code: they follow their currency
+    if sum(r["enabled"] for r in rows) < MROWS_MIN:
+        return None, f"enable at least {MROWS_MIN} rows"
+    return {"currencies": defs, "rows": rows}, None
 
 
 def parse_row(f, n, move=None):

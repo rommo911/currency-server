@@ -23,6 +23,25 @@
     </table></div>
     {% else %}<p class="sub">No client has pulled yet.</p>{% endif %}
   </div>
+  <div class="card">
+    <h2>Layout</h2>
+    <form method="post" action="{{ url_for('admin_layout') }}" id="layout-form" data-confirm="Unsaved changes in the form below will be lost. Switch layout anyway?">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <div class="opts">
+        <button type="submit" name="layout" value="cards" class="opt {% if s.layout == 'cards' %}on{% endif %}" {% if s.layout == 'cards' %}aria-current="true"{% endif %}>
+          <b>Cards</b>
+          <span class="mini cards"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <span>Up to 2 rows. Every row has its own currencies, shown as cards.</span>
+        </button>
+        <button type="submit" name="layout" value="matrix" class="opt {% if s.layout == 'matrix' %}on{% endif %}" {% if s.layout == 'matrix' %}aria-current="true"{% endif %}>
+          <b>Matrix</b>
+          <span class="mini matrix"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+          <span>2 to 3 rows sharing ONE currency list. Each row only has its own title and prices.</span>
+        </button>
+      </div>
+      <p class="sub">Each layout keeps its own data: switching never deletes the other one.</p>
+    </form>
+  </div>
   {% macro row_card(n, r) %}
     {% set p = 'r' ~ n ~ '_' %}
     <div class="card">
@@ -70,9 +89,53 @@
       <label class="chk"><input type="checkbox" name="fx_flash" {% if s.fx_flash %}checked{% endif %}> Flash on change</label>
       <label class="chk"><input type="checkbox" name="fx_glow" {% if s.fx_glow %}checked{% endif %}> Glow pulse</label>
     </div>
+    {% if s.layout == 'matrix' %}
+    {% set m = d.matrix %}
+    <div class="card">
+      <h2>Currencies shared by all rows ({{ row_min }}&ndash;{{ row_max }})</h2>
+      <input type="hidden" name="m_rows" value="{{ m.currencies|length }}">
+      {% for c in m.currencies + ([{}] if m.currencies|length < row_max else []) %}
+      {% set idx = loop.index0 %}{% set last = m.currencies|length - 1 %}
+      <div class="row">
+        {% if c.code %}
+        <span class="mv">
+          <button type="submit" name="move" value="m_{{ idx }}_up" title="Move up" {% if idx == 0 %}disabled{% endif %}>&uarr;</button>
+          <button type="submit" name="move" value="m_{{ idx }}_down" title="Move down" {% if idx == last %}disabled{% endif %}>&darr;</button>
+        </span>
+        {% else %}<span class="mv"></span>{% endif %}
+        {% if c.flag %}<img src="{{ url_for('flags', name=c.flag) }}" alt="">{% else %}<span class="noflag"></span>{% endif %}
+        <input type="hidden" name="m_flag_{{ idx }}" value="{{ c.flag or '' }}">
+        <input name="m_code_{{ idx }}" value="{{ c.code or '' }}" placeholder="{{ 'Code (new)' if not c.code else '' }}" maxlength="{{ lim.code }}" size="6">
+        <input name="m_name_{{ idx }}" value="{{ c.name or '' }}" placeholder="Name" maxlength="{{ lim.name }}">
+        <input name="m_symbol_{{ idx }}" value="{{ c.symbol or '' }}" placeholder="Sym" maxlength="{{ lim.symbol }}" size="3">
+        <label class="chk"><input type="checkbox" name="m_enabled_{{ idx }}" {% if c.enabled is not defined or c.enabled %}checked{% endif %}> on</label>
+        <input type="file" name="m_upload_{{ idx }}" accept="image/png" title="Flag PNG (optional; auto-fetched if empty)">
+        {% if c.code %}<label class="chk del"><input type="checkbox" name="m_remove_{{ idx }}"> remove</label>{% endif %}
+      </div>
+      {% endfor %}
+      <p class="sub">Last line adds a new currency (its price goes in every row below). Flag is auto-fetched from flagcdn.com unless you upload a PNG.</p>
+    </div>
+    {% for r in m.rows %}{% set n = loop.index0 %}
+    <div class="card">
+      <h2>Row {{ n + 1 }}</h2>
+      <label class="chk"><input type="checkbox" name="mr{{ n }}_enabled" {% if r.enabled %}checked{% endif %}> Row enabled (at least {{ mrows_min }} rows must be on)</label>
+      <label>Title <input name="mr{{ n }}_title" value="{{ r.title }}" maxlength="{{ lim.title }}"></label>
+      <label>Subtitle <input name="mr{{ n }}_subtitle" value="{{ r.subtitle }}" maxlength="{{ lim.subtitle }}"></label>
+      <div class="prices">
+        {% for c in m.currencies + ([{}] if m.currencies|length < row_max else []) %}
+        <label>{{ c.code or 'New currency' }}
+          <input name="mr{{ n }}_price_{{ loop.index0 }}" value="{{ r.prices[c.code] if c.code else '' }}" placeholder="Price" inputmode="decimal" pattern="[0-9]{1,8}(\.[0-9]{1,2})?" size="10">
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
     {% for r in d.rows %}{{ row_card(loop.index0, r) }}{% endfor %}
+    {% endif %}
     <button class="save" type="submit">Save &amp; publish</button>
   </form>
 </div>
+<script src="{{ url_for('static', filename='admin.js') }}"></script>
 </body>
 </html>

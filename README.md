@@ -10,7 +10,7 @@ Admin edits title/subtitle/palette/effects/currencies; dashboards pull `GET /api
 
 Admin also lists the dashboards that pulled in the last hour (by client ID, in memory).
 
-Payload: `{schema:1, server_version, version:int, updated_at, settings:{...}, currencies:[...], rows:[{enabled,title,subtitle,currencies:[{code,name,symbol,price,enabled,flag(url|null)}]} x2]}`. `settings.title/subtitle` + flat `currencies` mirror the first enabled row so dashboards from before two-row support keep working; each row holds 2-4 currencies.
+Payload: `{schema:1, server_version, version:int, updated_at, settings:{...}, currencies:[...], rows:[{enabled,title,subtitle,currencies:[{code,name,symbol,price,enabled,flag(url|null)}]} x2]}`. `settings.title/subtitle` + flat `currencies` mirror the first enabled row so dashboards from before two-row support keep working; each row holds 2-4 currencies. `settings.layout` is `cards` (up to 2 independent rows) or `matrix` (2-3 rows sharing one currency list, each with its own prices); in matrix layout the rows are still sent as `rows` (first two) plus `more_rows` (third), all carrying the same currencies, so older dashboards just show the first two as cards. Each layout keeps its own data on the server (`rows` / `matrix` in data.json), so switching never loses anything.
 `version` increments on every save. `data.json` is created on first save.
 
 ## Workspace
